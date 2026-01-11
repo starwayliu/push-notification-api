@@ -14,7 +14,11 @@
 
 ## 部署
 
-### Zeabur 部署（推荐）
+### Vercel 部署（推荐）
+
+快速部署到 Vercel 平台，查看 [VERCEL.md](./VERCEL.md) 获取详细部署指南。
+
+### Zeabur 部署
 
 快速部署到 Zeabur 云平台，查看 [ZEABUR.md](./ZEABUR.md) 获取详细部署指南。
 
