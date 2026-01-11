@@ -1,7 +1,15 @@
 import express from 'express';
 import { WebPushService } from '../services/webPushService';
 import { AndroidPushService } from '../services/androidPushService';
-import { PushNotificationRequest, PushNotificationResponse, ServiceStatus } from '../types';
+import { tokenStorage } from '../services/tokenStorageService';
+import {
+  PushNotificationRequest,
+  PushNotificationResponse,
+  ServiceStatus,
+  RegisterTokenRequest,
+  RegisterTokenResponse,
+  Platform,
+} from '../types';
 
 const router = express.Router();
 const webPushService = new WebPushService();
@@ -161,6 +169,219 @@ router.post('/send', async (req, res) => {
     res.json(response);
   } catch (error: any) {
     console.error('Error sending push notification:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Internal server error',
+    });
+  }
+});
+
+/**
+ * 注册/保存 device token
+ * POST /api/push/tokens
+ */
+router.post('/tokens', (req, res) => {
+  try {
+    const request: RegisterTokenRequest = req.body;
+
+    // 验证请求数据
+    if (!request.platform || !request.token) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: platform, token',
+      });
+    }
+
+    if (request.platform !== 'web' && request.platform !== 'android') {
+      return res.status(400).json({
+        success: false,
+        message: 'platform must be "web" or "android"',
+      });
+    }
+
+    // 验证 token 格式
+    if (request.platform === 'web') {
+      try {
+        JSON.parse(request.token);
+      } catch {
+        return res.status(400).json({
+          success: false,
+          message: 'Web platform token must be a valid JSON string',
+        });
+      }
+    }
+
+    // 注册 token
+    const deviceToken = tokenStorage.registerToken(
+      request.userId,
+      request.platform,
+      request.token
+    );
+
+    const response: RegisterTokenResponse = {
+      success: true,
+      message: 'Token registered successfully',
+      data: {
+        id: deviceToken.id,
+        token: deviceToken,
+      },
+    };
+
+    res.status(201).json(response);
+  } catch (error: any) {
+    console.error('Error registering token:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Internal server error',
+    });
+  }
+});
+
+/**
+ * 获取 device tokens
+ * GET /api/push/tokens?userId=xxx&platform=web
+ * GET /api/push/tokens/:tokenId
+ */
+router.get('/tokens/:tokenId?', (req, res) => {
+  try {
+    const { tokenId } = req.params;
+    const { userId, platform } = req.query;
+
+    // 如果提供了 tokenId，获取单个 token
+    if (tokenId) {
+      const token = tokenStorage.getTokenById(tokenId);
+      if (!token) {
+        return res.status(404).json({
+          success: false,
+          message: 'Token not found',
+        });
+      }
+
+      return res.json({
+        success: true,
+        data: token,
+      });
+    }
+
+    // 获取多个 tokens
+    const tokens = tokenStorage.getAllTokens(
+      userId as string | undefined,
+      platform as Platform | undefined
+    );
+
+    res.json({
+      success: true,
+      count: tokens.length,
+      data: tokens,
+    });
+  } catch (error: any) {
+    console.error('Error getting tokens:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Internal server error',
+    });
+  }
+});
+
+/**
+ * 根据用户 ID 获取 tokens
+ * GET /api/push/tokens/user/:userId?platform=web
+ */
+router.get('/tokens/user/:userId', (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { platform } = req.query;
+
+    let tokens = tokenStorage.getTokensByUserId(userId);
+
+    // 如果指定了平台，进行过滤
+    if (platform && (platform === 'web' || platform === 'android')) {
+      tokens = tokens.filter((token) => token.platform === platform);
+    }
+
+    res.json({
+      success: true,
+      userId,
+      count: tokens.length,
+      data: tokens,
+    });
+  } catch (error: any) {
+    console.error('Error getting user tokens:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Internal server error',
+    });
+  }
+});
+
+/**
+ * 获取统计信息
+ * GET /api/push/tokens/stats
+ */
+router.get('/tokens/stats', (req, res) => {
+  try {
+    const stats = tokenStorage.getStats();
+
+    res.json({
+      success: true,
+      data: stats,
+    });
+  } catch (error: any) {
+    console.error('Error getting stats:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Internal server error',
+    });
+  }
+});
+
+/**
+ * 删除 device token
+ * DELETE /api/push/tokens/:tokenId
+ */
+router.delete('/tokens/:tokenId', (req, res) => {
+  try {
+    const { tokenId } = req.params;
+
+    const deleted = tokenStorage.deleteToken(tokenId);
+
+    if (!deleted) {
+      return res.status(404).json({
+        success: false,
+        message: 'Token not found',
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Token deleted successfully',
+    });
+  } catch (error: any) {
+    console.error('Error deleting token:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message || 'Internal server error',
+    });
+  }
+});
+
+/**
+ * 删除用户的所有 tokens
+ * DELETE /api/push/tokens/user/:userId
+ */
+router.delete('/tokens/user/:userId', (req, res) => {
+  try {
+    const { userId } = req.params;
+
+    const count = tokenStorage.deleteTokensByUserId(userId);
+
+    res.json({
+      success: true,
+      message: `Deleted ${count} token(s) for user ${userId}`,
+      count,
+    });
+  } catch (error: any) {
+    console.error('Error deleting user tokens:', error);
     res.status(500).json({
       success: false,
       message: error.message || 'Internal server error',

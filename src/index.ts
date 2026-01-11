@@ -37,6 +37,12 @@ app.get('/', (req, res) => {
       status: 'GET /api/push/status',
       webPublicKey: 'GET /api/push/web/public-key',
       send: 'POST /api/push/send',
+      registerToken: 'POST /api/push/tokens',
+      getTokens: 'GET /api/push/tokens',
+      getUserTokens: 'GET /api/push/tokens/user/:userId',
+      getTokenStats: 'GET /api/push/tokens/stats',
+      deleteToken: 'DELETE /api/push/tokens/:tokenId',
+      deleteUserTokens: 'DELETE /api/push/tokens/user/:userId',
     },
   });
 });
@@ -64,5 +70,10 @@ if (process.env.VERCEL !== '1' && !process.env.VERCEL_ENV) {
     console.log(`  GET  /api/push/status`);
     console.log(`  GET  /api/push/web/public-key`);
     console.log(`  POST /api/push/send`);
+    console.log(`  POST /api/push/tokens`);
+    console.log(`  GET  /api/push/tokens`);
+    console.log(`  GET  /api/push/tokens/user/:userId`);
+    console.log(`  GET  /api/push/tokens/stats`);
+    console.log(`  DELETE /api/push/tokens/:tokenId`);
   });
 }

@@ -94,7 +94,131 @@ npm start
 }
 ```
 
-### 3. 发送推送通知
+### 3. 注册 Device Token
+
+**端点:** `POST /api/push/tokens`
+
+**请求体:**
+```json
+{
+  "userId": "user123",
+  "platform": "web",
+  "token": "{\"endpoint\":\"https://...\",\"keys\":{\"p256dh\":\"...\",\"auth\":\"...\"}}"
+}
+```
+
+**字段说明:**
+- `platform` (必需) - 平台类型：`"web"` 或 `"android"`
+- `token` (必需) - 设备令牌
+  - Web: PushSubscription 的 JSON 字符串
+  - Android: FCM 设备令牌
+- `userId` (可选) - 用户 ID，用于关联多个设备
+
+**响应:**
+```json
+{
+  "success": true,
+  "message": "Token registered successfully",
+  "data": {
+    "id": "token_1234567890_abc123",
+    "token": {
+      "id": "token_1234567890_abc123",
+      "userId": "user123",
+      "platform": "web",
+      "token": "...",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  }
+}
+```
+
+### 4. 获取 Device Tokens
+
+**端点:** `GET /api/push/tokens?userId=xxx&platform=web`
+**端点:** `GET /api/push/tokens/:tokenId`
+
+**查询参数:**
+- `userId` (可选) - 过滤特定用户的 tokens
+- `platform` (可选) - 过滤特定平台的 tokens
+
+**响应:**
+```json
+{
+  "success": true,
+  "count": 2,
+  "data": [
+    {
+      "id": "token_1234567890_abc123",
+      "userId": "user123",
+      "platform": "web",
+      "token": "...",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ]
+}
+```
+
+### 5. 获取用户的 Tokens
+
+**端点:** `GET /api/push/tokens/user/:userId?platform=web`
+
+**响应:**
+```json
+{
+  "success": true,
+  "userId": "user123",
+  "count": 1,
+  "data": [...]
+}
+```
+
+### 6. 获取统计信息
+
+**端点:** `GET /api/push/tokens/stats`
+
+**响应:**
+```json
+{
+  "success": true,
+  "data": {
+    "total": 10,
+    "byPlatform": {
+      "web": 5,
+      "android": 5
+    },
+    "byUser": 3
+  }
+}
+```
+
+### 7. 删除 Device Token
+
+**端点:** `DELETE /api/push/tokens/:tokenId`
+
+**响应:**
+```json
+{
+  "success": true,
+  "message": "Token deleted successfully"
+}
+```
+
+### 8. 删除用户的所有 Tokens
+
+**端点:** `DELETE /api/push/tokens/user/:userId`
+
+**响应:**
+```json
+{
+  "success": true,
+  "message": "Deleted 3 token(s) for user user123",
+  "count": 3
+}
+```
+
+### 9. 发送推送通知
 
 **端点:** `POST /api/push/send`
 
@@ -189,6 +313,47 @@ curl -X POST http://localhost:3000/api/push/send \
       "id": "123"
     }
   }'
+```
+
+### 注册 Device Token
+
+```bash
+# 注册 Web Push token
+curl -X POST http://localhost:3000/api/push/tokens \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "user123",
+    "platform": "web",
+    "token": "{\"endpoint\":\"https://...\",\"keys\":{\"p256dh\":\"...\",\"auth\":\"...\"}}"
+  }'
+
+# 注册 Android FCM token
+curl -X POST http://localhost:3000/api/push/tokens \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "user123",
+    "platform": "android",
+    "token": "fcm_device_token_here"
+  }'
+```
+
+### 获取 Device Tokens
+
+```bash
+# 获取所有 tokens
+curl http://localhost:3000/api/push/tokens
+
+# 获取特定用户的 tokens
+curl http://localhost:3000/api/push/tokens?userId=user123
+
+# 获取特定平台的 tokens
+curl http://localhost:3000/api/push/tokens?platform=web
+
+# 获取特定用户的特定平台 tokens
+curl http://localhost:3000/api/push/tokens/user/user123?platform=web
+
+# 获取统计信息
+curl http://localhost:3000/api/push/tokens/stats
 ```
 
 ## 项目结构
