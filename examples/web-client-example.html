@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Push 通知示例</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            cursor: pointer;
+            margin: 10px 5px;
+            border-radius: 4px;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        .status {
+            margin: 20px 0;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            box-sizing: border-box;
+        }
+    </style>
+</head>
+<body>
+    <h1>Web Push 通知示例</h1>
+    
+    <div class="status" id="status">准备就绪</div>
+    
+    <div>
+        <button id="subscribeBtn">订阅推送通知</button>
+        <button id="unsubscribeBtn" disabled>取消订阅</button>
+    </div>
+    
+    <div style="margin-top: 20px;">
+        <h3>发送测试通知</h3>
+        <input type="text" id="titleInput" placeholder="通知标题" value="测试通知">
+        <input type="text" id="bodyInput" placeholder="通知内容" value="这是一条测试推送通知">
+        <button id="sendBtn" disabled>发送通知</button>
+    </div>
+
+    <script>
+        const API_URL = 'http://localhost:3000/api/push';
+        let subscription = null;
+        let publicKey = null;
+
+        // 将 base64 字符串转换为 Uint8Array
+        function urlBase64ToUint8Array(base64String) {
+            const padding = '='.repeat((4 - base64String.length % 4) % 4);
+            const base64 = (base64String + padding)
+                .replace(/\-/g, '+')
+                .replace(/_/g, '/');
+            const rawData = window.atob(base64);
+            const outputArray = new Uint8Array(rawData.length);
+            for (let i = 0; i < rawData.length; ++i) {
+                outputArray[i] = rawData.charCodeAt(i);
+            }
+            return outputArray;
+        }
+
+        // 获取公钥
+        async function getPublicKey() {
+            try {
+                const response = await fetch(`${API_URL}/web/public-key`);
+                const data = await response.json();
+                if (data.success) {
+                    publicKey = data.publicKey;
+                    updateStatus('已获取公钥');
+                } else {
+                    updateStatus('获取公钥失败: ' + data.message);
+                }
+            } catch (error) {
+                updateStatus('获取公钥错误: ' + error.message);
+            }
+        }
+
+        // 订阅推送
+        async function subscribe() {
+            if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+                updateStatus('浏览器不支持推送通知');
+                return;
+            }
+
+            try {
+                const registration = await navigator.serviceWorker.register('/sw.js');
+                updateStatus('Service Worker 已注册');
+
+                if (!publicKey) {
+                    await getPublicKey();
+                }
+
+                subscription = await registration.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array(publicKey)
+                });
+
+                updateStatus('已订阅推送通知');
+                document.getElementById('subscribeBtn').disabled = true;
+                document.getElementById('unsubscribeBtn').disabled = false;
+                document.getElementById('sendBtn').disabled = false;
+            } catch (error) {
+                updateStatus('订阅失败: ' + error.message);
+            }
+        }
+
+        // 取消订阅
+        async function unsubscribe() {
+            if (subscription) {
+                try {
+                    await subscription.unsubscribe();
+                    subscription = null;
+                    updateStatus('已取消订阅');
+                    document.getElementById('subscribeBtn').disabled = false;
+                    document.getElementById('unsubscribeBtn').disabled = true;
+                    document.getElementById('sendBtn').disabled = true;
+                } catch (error) {
+                    updateStatus('取消订阅失败: ' + error.message);
+                }
+            }
+        }
+
+        // 发送通知
+        async function sendNotification() {
+            if (!subscription) {
+                updateStatus('请先订阅推送通知');
+                return;
+            }
+
+            const title = document.getElementById('titleInput').value;
+            const body = document.getElementById('bodyInput').value;
+
+            try {
+                const response = await fetch(`${API_URL}/send`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        title: title,
+                        body: body,
+                        platform: 'web',
+                        tokens: [JSON.stringify(subscription)]
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    updateStatus('通知发送成功！');
+                } else {
+                    updateStatus('通知发送失败: ' + data.message);
+                }
+            } catch (error) {
+                updateStatus('发送错误: ' + error.message);
+            }
+        }
+
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+        }
+
+        // 事件监听
+        document.getElementById('subscribeBtn').addEventListener('click', subscribe);
+        document.getElementById('unsubscribeBtn').addEventListener('click', unsubscribe);
+        document.getElementById('sendBtn').addEventListener('click', sendNotification);
+
+        // 初始化
+        getPublicKey();
+    </script>
+</body>
+</html>
