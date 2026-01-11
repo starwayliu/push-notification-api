@@ -51,13 +51,18 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 Push Notification API server running on port ${PORT}`);
-  console.log(`📱 Supported platforms: Web, Android`);
-  console.log(`\nAvailable endpoints:`);
-  console.log(`  GET  /health`);
-  console.log(`  GET  /api/push/status`);
-  console.log(`  GET  /api/push/web/public-key`);
-  console.log(`  POST /api/push/send`);
-});
+// Export app for Vercel serverless functions
+export default app;
+
+// Start server only if not in Vercel environment
+if (process.env.VERCEL !== '1' && !process.env.VERCEL_ENV) {
+  app.listen(PORT, () => {
+    console.log(`🚀 Push Notification API server running on port ${PORT}`);
+    console.log(`📱 Supported platforms: Web, Android`);
+    console.log(`\nAvailable endpoints:`);
+    console.log(`  GET  /health`);
+    console.log(`  GET  /api/push/status`);
+    console.log(`  GET  /api/push/web/public-key`);
+    console.log(`  POST /api/push/send`);
+  });
+}
