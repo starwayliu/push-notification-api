@@ -29,13 +29,14 @@ app.use('/api/push', pushRoutes);
 // Root endpoint
 app.get('/', (req, res) => {
   res.json({
-    message: 'Multi-Platform Push Notification API',
+    message: 'Push Notification API',
     version: '1.0.0',
+    platforms: ['web', 'android'],
     endpoints: {
-      health: '/health',
-      send: 'POST /api/push/send',
-      webPublicKey: 'GET /api/push/web/public-key',
+      health: 'GET /health',
       status: 'GET /api/push/status',
+      webPublicKey: 'GET /api/push/web/public-key',
+      send: 'POST /api/push/send',
     },
   });
 });
@@ -50,18 +51,13 @@ app.use((err: any, req: express.Request, res: express.Response, next: express.Ne
   });
 });
 
-// Export app for Vercel serverless functions
-export default app;
-
-// Start server only if not in Vercel environment
-if (process.env.VERCEL !== '1' && !process.env.VERCEL_ENV) {
-  app.listen(PORT, () => {
-    console.log(`🚀 Push Notification API server running on port ${PORT}`);
-    console.log(`📱 Supported platforms: Web, Android`);
-    console.log(`\nAvailable endpoints:`);
-    console.log(`  GET  /health`);
-    console.log(`  POST /api/push/send`);
-    console.log(`  GET  /api/push/web/public-key`);
-    console.log(`  GET  /api/push/status`);
-  });
-}
+// Start server
+app.listen(PORT, () => {
+  console.log(`🚀 Push Notification API server running on port ${PORT}`);
+  console.log(`📱 Supported platforms: Web, Android`);
+  console.log(`\nAvailable endpoints:`);
+  console.log(`  GET  /health`);
+  console.log(`  GET  /api/push/status`);
+  console.log(`  GET  /api/push/web/public-key`);
+  console.log(`  POST /api/push/send`);
+});

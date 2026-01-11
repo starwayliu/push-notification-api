@@ -1,32 +1,31 @@
+export type Platform = 'web' | 'android';
+
 export interface PushNotificationRequest {
   title: string;
   body: string;
+  platform: Platform;
+  tokens: string[];
+  data?: Record<string, any>;
   icon?: string;
   badge?: string;
   image?: string;
-  data?: any;
-  platform: 'web' | 'android' | 'ios' | 'all';
-  tokens: string[];
-  sound?: string;
-  priority?: 'high' | 'normal';
-  ttl?: number;
-}
-
-export interface WebPushSubscription {
-  endpoint: string;
-  keys: {
-    p256dh: string;
-    auth: string;
-  };
+  url?: string;
 }
 
 export interface PushNotificationResponse {
   success: boolean;
   message: string;
   results?: {
-    web?: { success: number; failed: number };
-    android?: { success: number; failed: number };
-    ios?: { success: number; failed: number };
+    success: number;
+    failed: number;
+    errors?: Array<{
+      token: string;
+      error: string;
+    }>;
   };
-  errors?: string[];
+}
+
+export interface ServiceStatus {
+  web: boolean;
+  android: boolean;
 }

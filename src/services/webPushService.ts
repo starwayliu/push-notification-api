@@ -1,85 +1,113 @@
 import webpush from 'web-push';
-import { WebPushSubscription } from '../types';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 export class WebPushService {
-  private initialized: boolean = false;
+  private vapidPublicKey: string;
+  private vapidPrivateKey: string;
+  private vapidSubject: string;
 
   constructor() {
-    const publicKey = process.env.VAPID_PUBLIC_KEY;
-    const privateKey = process.env.VAPID_PRIVATE_KEY;
-    const subject = process.env.VAPID_SUBJECT;
+    this.vapidPublicKey = process.env.VAPID_PUBLIC_KEY || '';
+    this.vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || '';
+    this.vapidSubject = process.env.VAPID_SUBJECT || 'mailto:example@example.com';
 
-    if (publicKey && privateKey && subject) {
-      webpush.setVapidDetails(subject, publicKey, privateKey);
-      this.initialized = true;
-    } else {
-      console.warn('Web Push VAPID keys not configured. Web push notifications will be disabled.');
+    if (!this.vapidPublicKey || !this.vapidPrivateKey) {
+      console.warn('⚠️  VAPID keys not configured. Web push notifications will not work.');
+      return;
     }
+
+    webpush.setVapidDetails(this.vapidSubject, this.vapidPublicKey, this.vapidPrivateKey);
   }
 
+  /**
+   * 检查服务是否可用
+   */
+  isAvailable(): boolean {
+    return !!(this.vapidPublicKey && this.vapidPrivateKey);
+  }
+
+  /**
+   * 获取 VAPID 公钥
+   */
+  getPublicKey(): string {
+    return this.vapidPublicKey;
+  }
+
+  /**
+   * 发送推送通知到单个设备
+   */
   async sendNotification(
-    subscription: WebPushSubscription,
+    subscription: webpush.PushSubscription,
     payload: {
       title: string;
       body: string;
       icon?: string;
       badge?: string;
       image?: string;
-      data?: any;
+      url?: string;
+      data?: Record<string, any>;
     }
-  ): Promise<boolean> {
-    if (!this.initialized) {
-      throw new Error('Web Push service not initialized. Please configure VAPID keys.');
+  ): Promise<void> {
+    if (!this.isAvailable()) {
+      throw new Error('Web push service is not configured');
     }
 
-    try {
-      const notificationPayload = JSON.stringify({
-        title: payload.title,
-        body: payload.body,
-        icon: payload.icon,
-        badge: payload.badge,
-        image: payload.image,
-        data: payload.data,
-      });
+    const notificationPayload = JSON.stringify({
+      title: payload.title,
+      body: payload.body,
+      icon: payload.icon,
+      badge: payload.badge,
+      image: payload.image,
+      data: {
+        url: payload.url,
+        ...payload.data,
+      },
+    });
 
-      await webpush.sendNotification(subscription, notificationPayload);
-      return true;
-    } catch (error: any) {
-      console.error('Web push notification error:', error);
-      if (error.statusCode === 410 || error.statusCode === 404) {
-        // Subscription expired or invalid
-        throw new Error('Subscription expired or invalid');
+    await webpush.sendNotification(subscription, notificationPayload);
+  }
+
+  /**
+   * 批量发送推送通知
+   */
+  async sendBatch(
+    subscriptions: webpush.PushSubscription[],
+    payload: {
+      title: string;
+      body: string;
+      icon?: string;
+      badge?: string;
+      image?: string;
+      url?: string;
+      data?: Record<string, any>;
+    }
+  ): Promise<{ success: number; failed: number; errors: Array<{ token: string; error: string }> }> {
+    if (!this.isAvailable()) {
+      throw new Error('Web push service is not configured');
+    }
+
+    const results = {
+      success: 0,
+      failed: 0,
+      errors: [] as Array<{ token: string; error: string }>,
+    };
+
+    const promises = subscriptions.map(async (subscription, index) => {
+      try {
+        await this.sendNotification(subscription, payload);
+        results.success++;
+      } catch (error: any) {
+        results.failed++;
+        results.errors.push({
+          token: JSON.stringify(subscription),
+          error: error.message || 'Unknown error',
+        });
       }
-      throw error;
-    }
-  }
+    });
 
-  async sendBatchNotifications(
-    subscriptions: WebPushSubscription[],
-    payload: {
-      title: string;
-      body: string;
-      icon?: string;
-      badge?: string;
-      image?: string;
-      data?: any;
-    }
-  ): Promise<{ success: number; failed: number }> {
-    const results = await Promise.allSettled(
-      subscriptions.map((sub) => this.sendNotification(sub, payload))
-    );
-
-    const success = results.filter((r) => r.status === 'fulfilled').length;
-    const failed = results.filter((r) => r.status === 'rejected').length;
-
-    return { success, failed };
-  }
-
-  getPublicKey(): string | null {
-    return process.env.VAPID_PUBLIC_KEY || null;
-  }
-
-  isInitialized(): boolean {
-    return this.initialized;
+    await Promise.allSettled(promises);
+    return results;
   }
 }

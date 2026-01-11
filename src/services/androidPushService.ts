@@ -1,131 +1,121 @@
-import * as admin from 'firebase-admin';
-import { Message } from 'firebase-admin/messaging';
+import admin from 'firebase-admin';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 export class AndroidPushService {
-  private initialized: boolean = false;
+  private app: admin.app.App | null = null;
 
   constructor() {
-    try {
-      const projectId = process.env.FCM_PROJECT_ID;
-      const privateKey = process.env.FCM_PRIVATE_KEY?.replace(/\\n/g, '\n');
-      const clientEmail = process.env.FCM_CLIENT_EMAIL;
+    const projectId = process.env.FCM_PROJECT_ID;
+    const privateKey = process.env.FCM_PRIVATE_KEY?.replace(/\\n/g, '\n');
+    const clientEmail = process.env.FCM_CLIENT_EMAIL;
 
-      if (projectId && privateKey && clientEmail) {
-        if (!admin.apps.length) {
-          admin.initializeApp({
-            credential: admin.credential.cert({
-              projectId,
-              privateKey,
-              clientEmail,
-            }),
-          });
-        }
-        this.initialized = true;
+    if (!projectId || !privateKey || !clientEmail) {
+      console.warn('⚠️  FCM credentials not configured. Android push notifications will not work.');
+      return;
+    }
+
+    try {
+      // 检查是否已经初始化
+      if (admin.apps.length === 0) {
+        this.app = admin.initializeApp({
+          credential: admin.credential.cert({
+            projectId,
+            privateKey,
+            clientEmail,
+          }),
+        });
+        console.log('✅ FCM initialized successfully');
       } else {
-        console.warn('FCM credentials not configured. Android push notifications will be disabled.');
+        this.app = admin.app();
       }
     } catch (error) {
-      console.error('Failed to initialize FCM:', error);
+      console.error('❌ Failed to initialize FCM:', error);
     }
   }
 
+  /**
+   * 检查服务是否可用
+   */
+  isAvailable(): boolean {
+    return this.app !== null;
+  }
+
+  /**
+   * 发送推送通知到单个设备
+   */
   async sendNotification(
     token: string,
     payload: {
       title: string;
       body: string;
-      icon?: string;
-      image?: string;
-      data?: any;
-      sound?: string;
-      priority?: 'high' | 'normal';
+      data?: Record<string, any>;
+      imageUrl?: string;
     }
-  ): Promise<boolean> {
-    if (!this.initialized) {
-      throw new Error('Android Push service not initialized. Please configure FCM credentials.');
+  ): Promise<void> {
+    if (!this.isAvailable()) {
+      throw new Error('Android push service is not configured');
     }
 
-    try {
-      const message: Message = {
-        token,
-        notification: {
-          title: payload.title,
-          body: payload.body,
-          imageUrl: payload.image,
-        },
-        data: payload.data || {},
-        android: {
-          priority: payload.priority === 'high' ? 'high' : 'normal',
-          notification: {
-            sound: payload.sound || 'default',
-            icon: payload.icon,
-            channelId: 'default',
-          },
-        },
-      };
+    const message: admin.messaging.Message = {
+      token,
+      notification: {
+        title: payload.title,
+        body: payload.body,
+        imageUrl: payload.imageUrl,
+      },
+      data: payload.data
+        ? Object.entries(payload.data).reduce((acc, [key, value]) => {
+            acc[key] = String(value);
+            return acc;
+          }, {} as Record<string, string>)
+        : undefined,
+      android: {
+        priority: 'high' as const,
+      },
+    };
 
-      await admin.messaging().send(message);
-      return true;
-    } catch (error: any) {
-      console.error('Android push notification error:', error);
-      if (error.code === 'messaging/invalid-registration-token' || 
-          error.code === 'messaging/registration-token-not-registered') {
-        throw new Error('Invalid or unregistered token');
-      }
-      throw error;
-    }
+    await admin.messaging().send(message);
   }
 
-  async sendBatchNotifications(
+  /**
+   * 批量发送推送通知
+   */
+  async sendBatch(
     tokens: string[],
     payload: {
       title: string;
       body: string;
-      icon?: string;
-      image?: string;
-      data?: any;
-      sound?: string;
-      priority?: 'high' | 'normal';
+      data?: Record<string, any>;
+      imageUrl?: string;
     }
-  ): Promise<{ success: number; failed: number }> {
-    if (!this.initialized) {
-      throw new Error('Android Push service not initialized. Please configure FCM credentials.');
+  ): Promise<{ success: number; failed: number; errors: Array<{ token: string; error: string }> }> {
+    if (!this.isAvailable()) {
+      throw new Error('Android push service is not configured');
     }
 
-    try {
-      const message: Message = {
-        notification: {
-          title: payload.title,
-          body: payload.body,
-          imageUrl: payload.image,
-        },
-        data: payload.data || {},
-        android: {
-          priority: payload.priority === 'high' ? 'high' : 'normal',
-          notification: {
-            sound: payload.sound || 'default',
-            icon: payload.icon,
-            channelId: 'default',
-          },
-        },
-      };
+    const results = {
+      success: 0,
+      failed: 0,
+      errors: [] as Array<{ token: string; error: string }>,
+    };
 
-      const response = await admin.messaging().sendEachForMulticast({
-        tokens,
-        ...message,
-      });
+    // FCM 支持批量发送，但为了更好的错误处理，我们逐个发送
+    const promises = tokens.map(async (token) => {
+      try {
+        await this.sendNotification(token, payload);
+        results.success++;
+      } catch (error: any) {
+        results.failed++;
+        results.errors.push({
+          token,
+          error: error.message || 'Unknown error',
+        });
+      }
+    });
 
-      return {
-        success: response.successCount,
-        failed: response.failureCount,
-      };
-    } catch (error) {
-      console.error('Android batch push notification error:', error);
-      throw error;
-    }
-  }
-
-  isInitialized(): boolean {
-    return this.initialized;
+    await Promise.allSettled(promises);
+    return results;
   }
 }
