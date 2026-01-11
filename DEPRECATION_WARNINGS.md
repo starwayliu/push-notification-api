@@ -37,9 +37,9 @@ rm -rf node_modules package-lock.json
 npm install
 ```
 
-### 方案 2：使用 npm overrides（如果警告持续）
+### 方案 2：使用 npm overrides（已配置）
 
-如果更新后仍有警告，可以在 `package.json` 中添加 `overrides` 字段：
+已在 `package.json` 中添加 `overrides` 字段来强制使用更新版本：
 
 ```json
 {
@@ -49,6 +49,8 @@ npm install
   }
 }
 ```
+
+**注意**：`inflight` 包已被弃用且不再维护，但由于它是间接依赖，无法直接覆盖。这个警告通常不会影响功能，等待上游依赖更新即可。
 
 ### 方案 3：忽略警告（不推荐）
 
