@@ -83,13 +83,34 @@ router.post('/send', async (req, res) => {
       }
 
       // 将 tokens 转换为 PushSubscription 对象
-      const subscriptions = request.tokens.map((token) => {
+      const subscriptions: any[] = [];
+      const invalidTokens: string[] = [];
+      
+      request.tokens.forEach((token) => {
         try {
-          return JSON.parse(token) as any;
+          subscriptions.push(JSON.parse(token) as any);
         } catch {
-          throw new Error(`Invalid subscription format: ${token}`);
+          invalidTokens.push(token);
         }
       });
+
+      if (invalidTokens.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Invalid subscription format for ${invalidTokens.length} token(s)`,
+          errors: invalidTokens.map(token => ({
+            token,
+            error: 'Invalid JSON format'
+          }))
+        });
+      }
+
+      if (subscriptions.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'No valid subscriptions provided',
+        });
+      }
 
       const results = await webPushService.sendBatch(subscriptions, {
         title: request.title,
