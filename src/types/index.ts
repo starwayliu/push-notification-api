@@ -1,4 +1,4 @@
-export type Platform = 'web' | 'android';
+export type Platform = 'web' | 'android' | 'fcm-web';
 
 export interface PushNotificationRequest {
   title: string;

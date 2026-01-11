@@ -82,7 +82,7 @@ npm start
 }
 ```
 
-### 2. 获取 Web Push 公钥
+### 2. 获取 Web Push 公钥 (VAPID)
 
 **端点:** `GET /api/push/web/public-key`
 
@@ -94,7 +94,33 @@ npm start
 }
 ```
 
-### 3. 注册 Device Token
+### 3. 获取 FCM Web 配置
+
+**端点:** `GET /api/push/fcm/web/config`
+
+**说明:** 获取 FCM Web 配置信息，用于在浏览器中初始化 Firebase SDK。
+
+**响应:**
+```json
+{
+  "success": true,
+  "config": {
+    "projectId": "your-firebase-project-id",
+    "messagingSenderId": "your-messaging-sender-id"
+  },
+  "instructions": {
+    "message": "在浏览器中使用 Firebase SDK 初始化 FCM 并获取 token",
+    "steps": [
+      "1. 在 Firebase Console 中创建 Web App",
+      "2. 获取 Firebase 配置对象（包含 apiKey, authDomain, projectId 等）",
+      "3. 在浏览器中使用 Firebase SDK 初始化并获取 messaging token",
+      "4. 将获取到的 token 通过 POST /api/push/tokens 注册"
+    ]
+  }
+}
+```
+
+### 4. 注册 Device Token
 
 **端点:** `POST /api/push/tokens`
 
@@ -318,7 +344,7 @@ curl -X POST http://localhost:3000/api/push/send \
 ### 注册 Device Token
 
 ```bash
-# 注册 Web Push token
+# 注册 VAPID Web Push token
 curl -X POST http://localhost:3000/api/push/tokens \
   -H "Content-Type: application/json" \
   -d '{
@@ -327,13 +353,22 @@ curl -X POST http://localhost:3000/api/push/tokens \
     "token": "{\"endpoint\":\"https://...\",\"keys\":{\"p256dh\":\"...\",\"auth\":\"...\"}}"
   }'
 
+# 注册 FCM Web token（从浏览器获取的 FCM token）
+curl -X POST http://localhost:3000/api/push/tokens \
+  -H "Content-Type: application/json" \
+  -d '{
+    "userId": "user123",
+    "platform": "fcm-web",
+    "token": "fcm_web_device_token_from_browser"
+  }'
+
 # 注册 Android FCM token
 curl -X POST http://localhost:3000/api/push/tokens \
   -H "Content-Type: application/json" \
   -d '{
     "userId": "user123",
     "platform": "android",
-    "token": "fcm_device_token_here"
+    "token": "fcm_android_device_token"
   }'
 ```
 

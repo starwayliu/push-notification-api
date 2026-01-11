@@ -36,6 +36,7 @@ app.get('/', (req, res) => {
       health: 'GET /health',
       status: 'GET /api/push/status',
       webPublicKey: 'GET /api/push/web/public-key',
+      fcmWebConfig: 'GET /api/push/fcm/web/config',
       send: 'POST /api/push/send',
       registerToken: 'POST /api/push/tokens',
       getTokens: 'GET /api/push/tokens',
@@ -69,6 +70,7 @@ if (process.env.VERCEL !== '1' && !process.env.VERCEL_ENV) {
     console.log(`  GET  /health`);
     console.log(`  GET  /api/push/status`);
     console.log(`  GET  /api/push/web/public-key`);
+    console.log(`  GET  /api/push/fcm/web/config`);
     console.log(`  POST /api/push/send`);
     console.log(`  POST /api/push/tokens`);
     console.log(`  GET  /api/push/tokens`);

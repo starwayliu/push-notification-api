@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FCM Web Token 获取示例</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+        }
+        .container {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+        .token-display {
+            background: white;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 10px;
+            word-break: break-all;
+            font-family: monospace;
+            font-size: 12px;
+        }
+        .error {
+            color: red;
+            margin-top: 10px;
+        }
+        .success {
+            color: green;
+            margin-top: 10px;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        label {
+            display: block;
+            margin-top: 10px;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h1>FCM Web Token 获取示例</h1>
+    
+    <div class="container">
+        <h2>步骤 1: 配置 Firebase</h2>
+        <p>在 Firebase Console 中创建 Web App 并获取配置信息：</p>
+        <ol>
+            <li>前往 <a href="https://console.firebase.google.com/" target="_blank">Firebase Console</a></li>
+            <li>选择或创建项目</li>
+            <li>进入项目设置 > 常规</li>
+            <li>在"您的应用"部分，点击 Web 图标添加 Web App</li>
+            <li>复制 Firebase 配置对象</li>
+        </ol>
+        
+        <label for="firebaseConfig">Firebase 配置 (JSON):</label>
+        <textarea id="firebaseConfig" rows="8" placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","storageBucket":"...","messagingSenderId":"...","appId":"..."}'></textarea>
+        
+        <button onclick="initializeFirebase()">初始化 Firebase</button>
+        <div id="firebaseStatus"></div>
+    </div>
+
+    <div class="container">
+        <h2>步骤 2: 获取 FCM Token</h2>
+        <button id="getTokenBtn" onclick="getFCMToken()" disabled>获取 FCM Token</button>
+        <div id="tokenResult"></div>
+    </div>
+
+    <div class="container">
+        <h2>步骤 3: 注册 Token 到服务器</h2>
+        <label for="userId">用户 ID (可选):</label>
+        <input type="text" id="userId" placeholder="user123">
+        
+        <label for="apiUrl">API 地址:</label>
+        <input type="text" id="apiUrl" value="http://localhost:3000" placeholder="http://localhost:3000">
+        
+        <button id="registerBtn" onclick="registerToken()" disabled>注册 Token</button>
+        <div id="registerResult"></div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        // 注意：需要从 Firebase CDN 加载 SDK
+        // 或者使用 npm 安装 firebase 包
+        
+        window.firebaseApp = null;
+        window.messaging = null;
+        window.fcmToken = null;
+
+        window.initializeFirebase = async function() {
+            const configText = document.getElementById('firebaseConfig').value;
+            const statusDiv = document.getElementById('firebaseStatus');
+            
+            if (!configText) {
+                statusDiv.innerHTML = '<div class="error">请先输入 Firebase 配置</div>';
+                return;
+            }
+
+            try {
+                const config = JSON.parse(configText);
+                
+                // 动态加载 Firebase SDK
+                if (!window.firebase) {
+                    // 从 CDN 加载 Firebase SDK
+                    const script1 = document.createElement('script');
+                    script1.src = 'https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js';
+                    document.head.appendChild(script1);
+                    
+                    const script2 = document.createElement('script');
+                    script2.src = 'https://www.gstatic.com/firebasejs/10.7.1/firebase-messaging-compat.js';
+                    document.head.appendChild(script2);
+                    
+                    await new Promise((resolve) => {
+                        script2.onload = resolve;
+                    });
+                }
+
+                // 初始化 Firebase
+                if (!window.firebase.apps.length) {
+                    window.firebaseApp = window.firebase.initializeApp(config);
+                    window.messaging = window.firebase.messaging();
+                    statusDiv.innerHTML = '<div class="success">✅ Firebase 初始化成功！</div>';
+                    document.getElementById('getTokenBtn').disabled = false;
+                } else {
+                    window.firebaseApp = window.firebase.app();
+                    window.messaging = window.firebase.messaging();
+                    statusDiv.innerHTML = '<div class="success">✅ Firebase 已初始化</div>';
+                    document.getElementById('getTokenBtn').disabled = false;
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `<div class="error">❌ 初始化失败: ${error.message}</div>`;
+                console.error('Firebase initialization error:', error);
+            }
+        };
+
+        window.getFCMToken = async function() {
+            const resultDiv = document.getElementById('tokenResult');
+            
+            if (!window.messaging) {
+                resultDiv.innerHTML = '<div class="error">请先初始化 Firebase</div>';
+                return;
+            }
+
+            try {
+                // 请求通知权限
+                const permission = await Notification.requestPermission();
+                if (permission !== 'granted') {
+                    resultDiv.innerHTML = '<div class="error">❌ 通知权限被拒绝</div>';
+                    return;
+                }
+
+                // 获取 FCM token
+                const token = await window.messaging.getToken({
+                    vapidKey: undefined // FCM Web 不需要 VAPID key
+                });
+
+                if (token) {
+                    window.fcmToken = token;
+                    resultDiv.innerHTML = `
+                        <div class="success">✅ Token 获取成功！</div>
+                        <div class="token-display">${token}</div>
+                    `;
+                    document.getElementById('registerBtn').disabled = false;
+                } else {
+                    resultDiv.innerHTML = '<div class="error">❌ 无法获取 token</div>';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ 获取 token 失败: ${error.message}</div>`;
+                console.error('Get token error:', error);
+            }
+        };
+
+        window.registerToken = async function() {
+            const resultDiv = document.getElementById('registerResult');
+            const userId = document.getElementById('userId').value;
+            const apiUrl = document.getElementById('apiUrl').value;
+
+            if (!window.fcmToken) {
+                resultDiv.innerHTML = '<div class="error">请先获取 FCM token</div>';
+                return;
+            }
+
+            try {
+                const response = await fetch(`${apiUrl}/api/push/tokens`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        userId: userId || undefined,
+                        platform: 'fcm-web',
+                        token: window.fcmToken,
+                    }),
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    resultDiv.innerHTML = `
+                        <div class="success">✅ Token 注册成功！</div>
+                        <div>Token ID: ${data.data.id}</div>
+                    `;
+                } else {
+                    resultDiv.innerHTML = `<div class="error">❌ 注册失败: ${data.message}</div>`;
+                }
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="error">❌ 注册失败: ${error.message}</div>`;
+                console.error('Register token error:', error);
+            }
+        };
+    </script>
+</body>
+</html>

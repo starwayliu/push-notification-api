@@ -32,7 +32,7 @@ router.get('/status', (req, res) => {
 });
 
 /**
- * 获取 Web Push 公钥
+ * 获取 Web Push 公钥 (VAPID)
  * GET /api/push/web/public-key
  */
 router.get('/web/public-key', (req, res) => {
@@ -46,6 +46,45 @@ router.get('/web/public-key', (req, res) => {
   res.json({
     success: true,
     publicKey: webPushService.getPublicKey(),
+  });
+});
+
+/**
+ * 获取 FCM Web 配置信息
+ * GET /api/push/fcm/web/config
+ */
+router.get('/fcm/web/config', (req, res) => {
+  if (!androidPushService.isAvailable()) {
+    return res.status(503).json({
+      success: false,
+      message: 'FCM service is not configured',
+    });
+  }
+
+  const projectId = androidPushService.getProjectId();
+  if (!projectId) {
+    return res.status(503).json({
+      success: false,
+      message: 'FCM project ID is not configured',
+    });
+  }
+
+  res.json({
+    success: true,
+    config: {
+      projectId,
+      // 注意：messagingSenderId 通常等于 projectId，但可能需要单独配置
+      messagingSenderId: process.env.FCM_MESSAGING_SENDER_ID || projectId,
+    },
+    instructions: {
+      message: '在浏览器中使用 Firebase SDK 初始化 FCM 并获取 token',
+      steps: [
+        '1. 在 Firebase Console 中创建 Web App',
+        '2. 获取 Firebase 配置对象（包含 apiKey, authDomain, projectId 等）',
+        '3. 在浏览器中使用 Firebase SDK 初始化并获取 messaging token',
+        '4. 将获取到的 token 通过 POST /api/push/tokens 注册',
+      ],
+    },
   });
 });
 
@@ -72,16 +111,17 @@ router.post('/send', async (req, res) => {
       });
     }
 
-    if (request.platform !== 'web' && request.platform !== 'android') {
+    if (request.platform !== 'web' && request.platform !== 'android' && request.platform !== 'fcm-web') {
       return res.status(400).json({
         success: false,
-        message: 'platform must be "web" or "android"',
+        message: 'platform must be "web", "android", or "fcm-web"',
       });
     }
 
     let response: PushNotificationResponse;
 
     if (request.platform === 'web') {
+      // VAPID Web Push 通知
       // Web Push 通知
       if (!webPushService.isAvailable()) {
         return res.status(503).json({
@@ -139,12 +179,12 @@ router.post('/send', async (req, res) => {
           errors: results.errors.length > 0 ? results.errors : undefined,
         },
       };
-    } else {
-      // Android FCM 通知
+    } else if (request.platform === 'fcm-web') {
+      // FCM Web 通知
       if (!androidPushService.isAvailable()) {
         return res.status(503).json({
           success: false,
-          message: 'Android push service is not configured',
+          message: 'FCM service is not configured',
         });
       }
 
@@ -153,6 +193,33 @@ router.post('/send', async (req, res) => {
         body: request.body,
         data: request.data,
         imageUrl: request.image,
+        platform: 'web',
+      });
+
+      response = {
+        success: results.failed === 0,
+        message: `Sent ${results.success} notifications, ${results.failed} failed`,
+        results: {
+          success: results.success,
+          failed: results.failed,
+          errors: results.errors.length > 0 ? results.errors : undefined,
+        },
+      };
+    } else {
+      // Android FCM 通知
+      if (!androidPushService.isAvailable()) {
+        return res.status(503).json({
+          success: false,
+          message: 'FCM service is not configured',
+        });
+      }
+
+      const results = await androidPushService.sendBatch(request.tokens, {
+        title: request.title,
+        body: request.body,
+        data: request.data,
+        imageUrl: request.image,
+        platform: 'android',
       });
 
       response = {
@@ -192,10 +259,10 @@ router.post('/tokens', (req, res) => {
       });
     }
 
-    if (request.platform !== 'web' && request.platform !== 'android') {
+    if (request.platform !== 'web' && request.platform !== 'android' && request.platform !== 'fcm-web') {
       return res.status(400).json({
         success: false,
-        message: 'platform must be "web" or "android"',
+        message: 'platform must be "web", "android", or "fcm-web"',
       });
     }
 
@@ -210,6 +277,7 @@ router.post('/tokens', (req, res) => {
         });
       }
     }
+    // FCM Web token 是字符串格式，不需要验证 JSON
 
     // 注册 token
     const deviceToken = tokenStorage.registerToken(

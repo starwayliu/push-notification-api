@@ -52,10 +52,11 @@ export class AndroidPushService {
       body: string;
       data?: Record<string, any>;
       imageUrl?: string;
+      platform?: 'android' | 'web';
     }
   ): Promise<void> {
     if (!this.isAvailable()) {
-      throw new Error('Android push service is not configured');
+      throw new Error('FCM service is not configured');
     }
 
     const message: admin.messaging.Message = {
@@ -71,10 +72,27 @@ export class AndroidPushService {
             return acc;
           }, {} as Record<string, string>)
         : undefined,
-      android: {
-        priority: 'high' as const,
-      },
     };
+
+    // 根据平台设置特定配置
+    if (payload.platform === 'android') {
+      message.android = {
+        priority: 'high' as const,
+      };
+    } else if (payload.platform === 'web') {
+      message.webpush = {
+        notification: {
+          title: payload.title,
+          body: payload.body,
+          icon: payload.imageUrl,
+        },
+      };
+    } else {
+      // 默认使用 Android 配置
+      message.android = {
+        priority: 'high' as const,
+      };
+    }
 
     await admin.messaging().send(message);
   }
@@ -89,10 +107,11 @@ export class AndroidPushService {
       body: string;
       data?: Record<string, any>;
       imageUrl?: string;
+      platform?: 'android' | 'web';
     }
   ): Promise<{ success: number; failed: number; errors: Array<{ token: string; error: string }> }> {
     if (!this.isAvailable()) {
-      throw new Error('Android push service is not configured');
+      throw new Error('FCM service is not configured');
     }
 
     const results = {
@@ -117,5 +136,12 @@ export class AndroidPushService {
 
     await Promise.allSettled(promises);
     return results;
+  }
+
+  /**
+   * 获取 FCM 项目 ID（用于 Web 客户端配置）
+   */
+  getProjectId(): string | null {
+    return process.env.FCM_PROJECT_ID || null;
   }
 }
